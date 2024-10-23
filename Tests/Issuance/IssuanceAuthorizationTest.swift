@@ -142,11 +142,11 @@ class IssuanceAuthorizationTest: XCTestCase {
     
     switch unAuthorized {
     case .success(let authorizationCode):
-      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode)
+      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode, nonce: nil)
       
       if case let .success(authorized) = authorizedRequest,
-         case let .noProofRequired(token, _, _, _) = authorized {
-        XCTAssert(true, "Got access token: \(token)")
+         case let .noProofRequired(request) = authorized {
+          XCTAssert(true, "Got access token: \(request.accessToken)")
         return
       }
       
@@ -195,10 +195,10 @@ class IssuanceAuthorizationTest: XCTestCase {
     
     switch unAuthorized {
     case .success(let authorizationCode):
-      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode)
+      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode, nonce: nil)
       if case let .success(authorized) = authorizedRequest,
-         case let .proofRequired(token, _, _, _, _) = authorized {
-        XCTAssert(true, "Got access token: \(token)")
+         case let .proofRequired(request) = authorized {
+        XCTAssert(true, "Got access token: \(request.accessToken)")
         return
       }
       
@@ -247,7 +247,7 @@ class IssuanceAuthorizationTest: XCTestCase {
     
     switch unAuthorized {
     case .success(let authorizationCode):
-      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode)
+      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode, nonce: nil)
       
       switch authorizedRequest {
       case .success:
@@ -311,8 +311,8 @@ class IssuanceAuthorizationTest: XCTestCase {
     
     switch result {
     case .success(let request):
-      if case let .noProofRequired(token, _, _, _) = request {
-        XCTAssert(true, "Got access token: \(token)")
+      if case let .noProofRequired(request) = request {
+        XCTAssert(true, "Got access token: \(request.accessToken)")
       }
     case .failure(let error):
       XCTAssert(false, error.localizedDescription)

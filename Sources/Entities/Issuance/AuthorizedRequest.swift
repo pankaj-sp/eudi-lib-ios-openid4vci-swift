@@ -35,20 +35,33 @@ public extension CanExpire {
   }
 }
 
+public struct NoProofRequiredAuthorizedRequest {
+    public var accessToken: IssuanceAccessToken
+    public var refreshToken: IssuanceRefreshToken?
+    public var credentialIdentifiers: AuthorizationDetailsIdentifiers?
+    public var timeStamp: TimeInterval
+}
+
+public struct ProofRequiredAuthorizedRequest {
+    public var accessToken: IssuanceAccessToken
+    public var refreshToken: IssuanceRefreshToken?
+    public var cNonce: CNonce
+    public var credentialIdentifiers: AuthorizationDetailsIdentifiers?
+    public var timeStamp: TimeInterval
+    public var dpopNonce: DPopNonce? = nil
+}
+
 public enum AuthorizedRequest {
-  case noProofRequired(
-    accessToken: IssuanceAccessToken,
-    refreshToken: IssuanceRefreshToken?,
-    credentialIdentifiers: AuthorizationDetailsIdentifiers?,
-    timeStamp: TimeInterval
-  )
-  case proofRequired(
-    accessToken: IssuanceAccessToken,
-    refreshToken: IssuanceRefreshToken?,
-    cNonce: CNonce,
-    credentialIdentifiers: AuthorizationDetailsIdentifiers?,
-    timeStamp: TimeInterval
-  )
+  case noProofRequired(NoProofRequiredAuthorizedRequest)
+  case proofRequired(ProofRequiredAuthorizedRequest)
+
+  public mutating func updateCNonce(_ cNonce: CNonce) {
+    if case let .proofRequired(proofRequiredAuthorizedRequest) = self {
+      var proofRequiredAuthorizedRequest = proofRequiredAuthorizedRequest
+      proofRequiredAuthorizedRequest.cNonce = cNonce
+      self = .proofRequired(proofRequiredAuthorizedRequest)
+    }
+  }
     
   public func isAccessTokenExpired(clock: TimeInterval) -> Bool {
     guard let timeStamp = self.timeStamp else {
@@ -69,17 +82,17 @@ public enum AuthorizedRequest {
     
   public var timeStamp: TimeInterval? {
     switch self {
-    case .noProofRequired(_, _, _, let timeStamp):
-      return timeStamp
-    case .proofRequired(_, _, _, _, let timeStamp):
-      return timeStamp
+    case .noProofRequired(let request):
+      return request.timeStamp
+    case .proofRequired(let request):
+      return request.timeStamp
     }
   }
     
   public var noProofToken: IssuanceAccessToken? {
     switch self {
-    case .noProofRequired(let accessToken, _, _, _):
-      return accessToken
+    case .noProofRequired(let request):
+      return request.accessToken
     case .proofRequired:
       return nil
     }
@@ -89,8 +102,17 @@ public enum AuthorizedRequest {
     switch self {
     case .noProofRequired:
       return nil
-    case .proofRequired(let accessToken, _, _, _, _):
-      return accessToken
+    case .proofRequired(let request):
+      return request.accessToken
+    }
+  }
+    
+  public var dpopNonce: DPopNonce? {
+    switch self {
+    case .noProofRequired:
+      return nil
+    case .proofRequired(let request):
+      return request.dpopNonce
     }
   }
 }
@@ -98,24 +120,26 @@ public enum AuthorizedRequest {
 public extension AuthorizedRequest {
   var accessToken: IssuanceAccessToken? {
     switch self {
-    case .noProofRequired(let accessToken, _, _, _):
-      return accessToken
-    case .proofRequired(let accessToken, _, _, _, _):
-      return accessToken
+    case .noProofRequired(let request):
+      return request.accessToken
+    case .proofRequired(let request):
+      return request.accessToken
     }
   }
   
   func handleInvalidProof(cNonce: CNonce) throws -> AuthorizedRequest {
     switch self {
       
-    case .noProofRequired(let accessToken, let refreshToken, let credentialIdentifiers, let timeStamp):
-      return .proofRequired(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        cNonce: cNonce,
-        credentialIdentifiers: credentialIdentifiers,
-        timeStamp: timeStamp
-      )
+    case .noProofRequired(let request):
+        return .proofRequired(
+            .init(
+                accessToken: request.accessToken,
+                refreshToken: request.refreshToken,
+                cNonce: cNonce,
+                credentialIdentifiers: request.credentialIdentifiers,
+                timeStamp: request.timeStamp
+            )
+        )
     default: throw ValidationError.error(reason: "Expected .noProofRequired authorisation request")
     }
   }

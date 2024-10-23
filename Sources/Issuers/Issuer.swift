@@ -16,6 +16,8 @@
 import Foundation
 import JOSESwift
 
+public typealias DPopNonce = String
+
 public protocol IssuerType {
   
   func pushAuthorizationCodeRequest(
@@ -35,7 +37,8 @@ public protocol IssuerType {
   ) async -> Result<UnauthorizedRequest, Error>
   
   func requestAccessToken(
-    authorizationCode: UnauthorizedRequest
+    authorizationCode: UnauthorizedRequest,
+    nonce: String?
   ) async -> Result<AuthorizedRequest, Error>
   
   func requestSingle(
@@ -53,12 +56,14 @@ public protocol IssuerType {
   
   func requestDeferredIssuance(
     proofRequest: AuthorizedRequest,
-    transactionId: TransactionId
+    transactionId: TransactionId,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<DeferredCredentialIssuanceResponse, Error>
   
   func notify(
     authorizedRequest: AuthorizedRequest,
-    notificationId: NotificationObject
+    notificationId: NotificationObject,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<Void, Error>
   
   func requestBatch(
@@ -237,28 +242,32 @@ public actor Issuer: IssuerType {
           if let cNonce = nonce {
             return .success(
               .proofRequired(
-                accessToken: try IssuanceAccessToken(
+                .init(
+                  accessToken: try IssuanceAccessToken(
                   accessToken: accessToken.accessToken,
-                  tokenType: accessToken.tokenType, 
+                  tokenType: accessToken.tokenType,
                   expiresIn: TimeInterval(expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                cNonce: cNonce,
-                credentialIdentifiers: identifiers, 
-                timeStamp: Date().timeIntervalSinceReferenceDate
+                  ),
+                  refreshToken: nil,
+                  cNonce: cNonce,
+                  credentialIdentifiers: identifiers,
+                  timeStamp: Date().timeIntervalSinceReferenceDate
+                )
               )
             )
           } else {
             return .success(
               .noProofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: accessToken.accessToken,
-                  tokenType: accessToken.tokenType,
-                  expiresIn: TimeInterval(expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                credentialIdentifiers: identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate
+                .init(
+                  accessToken: try IssuanceAccessToken(
+                    accessToken: accessToken.accessToken,
+                    tokenType: accessToken.tokenType,
+                    expiresIn: TimeInterval(expiresIn ?? .zero)
+                  ),
+                  refreshToken: nil,
+                  credentialIdentifiers: identifiers,
+                  timeStamp: Date().timeIntervalSinceReferenceDate
+                )
               )
             )
           }
@@ -275,7 +284,7 @@ public actor Issuer: IssuerType {
     }
   }
   
-  public func requestAccessToken(authorizationCode: UnauthorizedRequest) async -> Result<AuthorizedRequest, Error> {
+  public func requestAccessToken(authorizationCode: UnauthorizedRequest, nonce: String?) async -> Result<AuthorizedRequest, Error> {
     switch authorizationCode {
     case .par:
       return .failure(ValidationError.error(reason: ".authorizationCode case is required"))
@@ -289,37 +298,44 @@ public actor Issuer: IssuerType {
             nonce: CNonce?,
             identifiers: AuthorizationDetailsIdentifiers?,
             tokenType: TokenType?,
-            expiresIn: Int?
+            expiresIn: Int?,
+            dpopNonce: DPopNonce?
           ) = try await authorizer.requestAccessTokenAuthFlow(
             authorizationCode: authorizationCode,
-            codeVerifier: request.pkceVerifier.codeVerifier
+            codeVerifier: request.pkceVerifier.codeVerifier,
+            nonce: nonce
           ).get()
           
           if let cNonce = response.nonce {
             return .success(
               .proofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: response.accessToken.accessToken,
-                  tokenType: response.tokenType,
-                  expiresIn: TimeInterval(response.expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                cNonce: cNonce,
-                credentialIdentifiers: response.identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate
+                .init(
+                    accessToken: try IssuanceAccessToken(
+                      accessToken: response.accessToken.accessToken,
+                      tokenType: response.tokenType,
+                      expiresIn: TimeInterval(response.expiresIn ?? .zero)
+                    ),
+                    refreshToken: nil,
+                    cNonce: cNonce,
+                    credentialIdentifiers: response.identifiers,
+                    timeStamp: Date().timeIntervalSinceReferenceDate,
+                    dpopNonce: response.dpopNonce
+                )
               )
             )
           } else {
             return .success(
               .noProofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: response.accessToken.accessToken,
-                  tokenType: response.tokenType,
-                  expiresIn: TimeInterval(response.expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                credentialIdentifiers: response.identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate
+                .init(
+                    accessToken: try IssuanceAccessToken(
+                      accessToken: response.accessToken.accessToken,
+                      tokenType: response.tokenType,
+                      expiresIn: TimeInterval(response.expiresIn ?? .zero)
+                    ),
+                    refreshToken: nil,
+                    credentialIdentifiers: response.identifiers,
+                    timeStamp: Date().timeIntervalSinceReferenceDate
+                )
               )
             )
           }
@@ -385,10 +401,10 @@ public actor Issuer: IssuerType {
   
   private func accessToken(from request: AuthorizedRequest) -> IssuanceAccessToken {
     switch request {
-    case .noProofRequired(let token, _, _, _):
-      return token
-    case .proofRequired(let token, _, _, _, _):
-      return token
+    case .noProofRequired(let request):
+      return request.accessToken
+    case .proofRequired(let request):
+      return request.accessToken
     }
   }
   
@@ -396,8 +412,8 @@ public actor Issuer: IssuerType {
     switch request {
     case .noProofRequired:
       return nil
-    case .proofRequired(_, _, let cnonce, _, _):
-      return cnonce
+    case .proofRequired(let request):
+      return request.cNonce
     }
   }
   
@@ -468,6 +484,7 @@ public actor Issuer: IssuerType {
         claimSet: claimSet,
         bindingKey: bindingKey,
         cNonce: cNonce(from: proofRequest),
+        dpopNonce: proofRequest.dpopNonce,
         credentialConfigurationIdentifier: credentialConfigurationIdentifier,
         responseEncryptionSpecProvider: responseEncryptionSpecProvider
       )
@@ -480,8 +497,8 @@ public actor Issuer: IssuerType {
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
   ) async throws -> Result<SubmittedRequest, Error> {
     switch noProofRequest {
-    case .noProofRequired(let token, _, _, _):
-      return try await requestIssuance(token: token) {
+    case .noProofRequired(let request):
+      return try await requestIssuance(token: request.accessToken, dpopNonce: nil) {
         let credentialRequests: [CredentialIssuanceRequest] = try requestPayload.map { identifier in
           guard let supportedCredential = issuerMetadata
             .credentialsSupported[identifier.credentialConfigurationIdentifier] else {
@@ -518,8 +535,8 @@ public actor Issuer: IssuerType {
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
   ) async throws -> Result<SubmittedRequest, Error> {
     switch proofRequest {
-    case .proofRequired(let token, _, let cNonce, _, _):
-      return try await requestIssuance(token: token) {
+    case .proofRequired(let request):
+      return try await requestIssuance(token: request.accessToken, dpopNonce: request.dpopNonce) {
         let credentialRequests: [CredentialIssuanceRequest] = try requestPayload.map { identifier in
           guard let supportedCredential = issuerMetadata
             .credentialsSupported[identifier.credentialConfigurationIdentifier] else {
@@ -531,7 +548,7 @@ public actor Issuer: IssuerType {
             proof: bindingKey.toSupportedProof(
               issuanceRequester: issuanceRequester,
               credentialSpec: supportedCredential,
-              cNonce: cNonce.value
+              cNonce: request.cNonce.value
             ),
             responseEncryptionSpecProvider: responseEncryptionSpecProvider
           )
@@ -559,6 +576,7 @@ private extension Issuer {
   
   private func requestIssuance(
     token: IssuanceAccessToken,
+    dpopNonce: DPopNonce?,
     issuanceRequestSupplier: () throws -> CredentialIssuanceRequest
   ) async throws -> Result<SubmittedRequest, Error> {
     let credentialRequest = try issuanceRequestSupplier()
@@ -567,7 +585,8 @@ private extension Issuer {
       self.deferredResponseEncryptionSpec = encryptionSpec
       let result = try await issuanceRequester.placeIssuanceRequest(
         accessToken: token,
-        request: single
+        request: single,
+        dpopNonce: dpopNonce
       )
       switch result {
       case .success(let response):
@@ -579,7 +598,8 @@ private extension Issuer {
       self.deferredResponseEncryptionSpec = encryptionSpec
       let result = try await issuanceRequester.placeBatchIssuanceRequest(
         accessToken: token,
-        request: credentials
+        request: credentials,
+        dpopNonce: dpopNonce
       )
       switch result {
       case .success(let response):
@@ -632,7 +652,7 @@ private extension Issuer {
   }
   
   func scopesAndCredentialConfigurationIds(credentialOffer: CredentialOffer) throws -> ([Scope], [CredentialConfigurationIdentifier]) {
-    var scopes = [Scope]()
+    var scopes = Set<Scope>()
     var configurationIdentifiers = [CredentialConfigurationIdentifier]()
     
     func credentialConfigurationById(id: CredentialConfigurationIdentifier) throws -> CredentialSupported {
@@ -645,7 +665,7 @@ private extension Issuer {
       switch config.authorizeIssuanceConfig {
       case .favorScopes:
         if let scope = credentialConfiguration.getScope() {
-          scopes.append(try Scope(scope))
+            scopes.insert(try Scope(scope))
         } else {
           configurationIdentifiers.append(id)
         }
@@ -653,41 +673,43 @@ private extension Issuer {
         configurationIdentifiers.append(id)
       }
     }
-    return (scopes, configurationIdentifiers)
+    return (Array(scopes), configurationIdentifiers)
   }
   
-  func formatBasedRequest(
-    token: IssuanceAccessToken,
-    claimSet: ClaimSet?,
-    bindingKey: BindingKey? = nil,
-    cNonce: CNonce? = nil,
-    credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
-    responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
-  ) async throws -> Result<SubmittedRequest, Error> {
+    func formatBasedRequest(
+      token: IssuanceAccessToken,
+      claimSet: ClaimSet?,
+      bindingKey: BindingKey? = nil,
+      cNonce: CNonce? = nil,
+      dpopNonce: DPopNonce? = nil,
+      credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
+      responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
+    ) async throws -> Result<SubmittedRequest, Error> {
+        
+      guard let supportedCredential = issuerMetadata
+        .credentialsSupported[credentialConfigurationIdentifier] else {
+        throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
+      }
       
-    guard let supportedCredential = issuerMetadata
-      .credentialsSupported[credentialConfigurationIdentifier] else {
-      throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
+      return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
+        return try supportedCredential.toIssuanceRequest(
+          requester: issuanceRequester,
+          claimSet: claimSet,
+          proof: bindingKey?.toSupportedProof(
+            issuanceRequester: issuanceRequester,
+            credentialSpec: supportedCredential,
+            cNonce: cNonce?.value
+          ),
+          responseEncryptionSpecProvider: responseEncryptionSpecProvider
+        )
+      }
     }
-    
-    return try await requestIssuance(token: token) {
-      return try supportedCredential.toIssuanceRequest(
-        requester: issuanceRequester,
-        claimSet: claimSet, 
-        proof: bindingKey?.toSupportedProof(
-          issuanceRequester: issuanceRequester,
-          credentialSpec: supportedCredential,
-          cNonce: cNonce?.value
-        ),
-        responseEncryptionSpecProvider: responseEncryptionSpecProvider
-      )
-    }
-  }
   
   func identifierBasedRequest(
     token: IssuanceAccessToken,
     bindingKey: BindingKey? = nil,
     cNonce: CNonce? = nil,
+    dpopNonce: DPopNonce? = nil,
     credentialIdentifier: CredentialIdentifier,
     credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
@@ -698,7 +720,7 @@ private extension Issuer {
       throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
     }
     
-    return try await requestIssuance(token: token) {
+    return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
       return try supportedCredential.toIssuanceRequest(
         requester: issuanceRequester,
         proof: bindingKey?.toSupportedProof(
@@ -808,7 +830,8 @@ public extension Issuer {
   
   func requestDeferredIssuance(
     proofRequest: AuthorizedRequest,
-    transactionId: TransactionId
+    transactionId: TransactionId,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<DeferredCredentialIssuanceResponse, Error> {
     
     guard let token = proofRequest.accessToken else {
@@ -818,18 +841,21 @@ public extension Issuer {
     return try await deferredIssuanceRequester.placeDeferredCredentialRequest(
       accessToken: token,
       transactionId: transactionId,
-      issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec
+      issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec,
+      dpopNonce: dpopNonce
     )
   }
   
   func notify(
     authorizedRequest: AuthorizedRequest,
-    notificationId: NotificationObject
+    notificationId: NotificationObject,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<Void, Error> {
     
     return try await notifyIssuer.notify(
       authorizedRequest: authorizedRequest,
-      notification: notificationId
+      notification: notificationId,
+      dpopNonce: dpopNonce
     )
   }
 }

@@ -55,7 +55,7 @@ public protocol PostingType {
    
    - Returns: A Result type with the response data or an error.
    */
-  func post<Response: Codable>(request: URLRequest) async -> Result<Response, PostError>
+  func post<Response: Codable>(request: URLRequest) async -> Result<(Response, URLResponse), PostError>
   
   /**
    Performs a POST request with the provided URLRequest.
@@ -89,7 +89,7 @@ public struct Poster: PostingType {
    
    - Returns: A Result type with the response data or an error.
    */
-  public func post<Response: Codable>(request: URLRequest) async -> Result<Response, PostError> {
+  public func post<Response: Codable>(request: URLRequest) async -> Result<(Response, URLResponse), PostError> {
     do {
       let (data, response) = try await self.session.data(for: request)
       let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -103,7 +103,7 @@ public struct Poster: PostingType {
       
       do {
         let object = try JSONDecoder().decode(Response.self, from: data)
-        return .success(object)
+          return .success((object, response))
         
       } catch {
         if statusCode == 200, let string = String(data: data, encoding: .utf8) {

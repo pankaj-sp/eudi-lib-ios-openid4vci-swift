@@ -18,7 +18,7 @@ import JOSESwift
 import CryptoKit
 
 public protocol DPoPConstructorType {
-  func jwt(endpoint: URL, accessToken: String?) throws -> String
+  func jwt(endpoint: URL, accessToken: String?, nonce: DPopNonce?) throws -> String
 }
 
 public class DPoPConstructor: DPoPConstructorType {
@@ -44,7 +44,7 @@ public class DPoPConstructor: DPoPConstructorType {
     self.privateKey = privateKey
   }
 
-  public func jwt(endpoint: URL, accessToken: String?) throws -> String {
+  public func jwt(endpoint: URL, accessToken: String?, nonce: DPopNonce?) throws -> String {
 
     let header = try JWSHeader(parameters: [
       "typ": "dpop+jwt",
@@ -63,6 +63,9 @@ public class DPoPConstructor: DPoPConstructorType {
       let hashed = SHA256.hash(data: data)
       let hash = Data(hashed).base64URLEncodedString()
       dictionary["ath"] = hash
+    }
+    if let nonce {
+        dictionary["nonce"] = nonce
     }
 
     let payload = Payload(try dictionary.toThrowingJSONData())

@@ -92,7 +92,7 @@ public enum Proof: Codable {
   }
 }
 
-public struct Scope: Codable {
+public struct Scope: Codable, Hashable, Equatable {
   public let value: String
   
   public init(_ value: String?) throws {

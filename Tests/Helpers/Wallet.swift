@@ -439,10 +439,10 @@ extension Wallet {
       
       switch unAuthorized {
       case .success(let request):
-        let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request)
+        let authorizedRequest = await issuer.requestAccessToken(authorizationCode: request, nonce: nil)
         if case let .success(authorized) = authorizedRequest,
-           case let .noProofRequired(token, _, _, _) = authorized {
-          print("--> [AUTHORIZATION] Authorization code exchanged with access token : \(token.accessToken)")
+           case let .noProofRequired(request) = authorized {
+          print("--> [AUTHORIZATION] Authorization code exchanged with access token : \(request.accessToken)")
           
           if let timeStamp = authorized.timeStamp {
             _ = authorized.accessToken?.isExpired(
@@ -574,7 +574,8 @@ extension Wallet {
     
     let deferredRequestResponse = try await issuer.requestDeferredIssuance(
       proofRequest: authorized,
-      transactionId: transactionId
+      transactionId: transactionId,
+      dpopNonce: nil
     )
     
     switch deferredRequestResponse {
