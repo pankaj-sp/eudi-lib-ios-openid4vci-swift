@@ -491,7 +491,7 @@ extension Wallet {
                 authorized: noProofRequiredState,
                 transactionId: transactionId
               )
-            case .issued(let credential, _):
+            case .issued(_, let credential, _):
               return credential
             }
           } else {
@@ -551,7 +551,7 @@ extension Wallet {
               authorized: authorized,
               transactionId: transactionId
             )
-          case .issued(let credential, _):
+          case .issued(_, let credential, _):
             return credential
           }
         } else {

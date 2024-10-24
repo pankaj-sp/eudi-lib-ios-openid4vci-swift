@@ -368,7 +368,7 @@ private extension SingleIssuanceSuccessResponse {
   func toSingleIssuanceResponse() throws -> CredentialIssuanceResponse {
     if let credential = credential {
       return CredentialIssuanceResponse(
-        credentialResponses: [.issued(credential: credential, notificationId: nil)],
+        credentialResponses: [.issued(format: format ?? "", credential: credential, notificationId: nil)],
         cNonce: CNonce(value: cNonce, expiresInSeconds: cNonceExpiresInSeconds)
       )
     } else if let transactionId = transactionId {
@@ -389,7 +389,7 @@ private extension BatchIssuanceSuccessResponse {
         if let transactionId = response.transactionId {
           return .deferred(transactionId: try .init(value: transactionId))
         } else if let credential = response.credential {
-          return .issued(credential: credential, notificationId: nil)
+            return CredentialIssuanceResponse.Result.issued(format: nil, credential: credential, notificationId: nil)
         } else {
           throw CredentialIssuanceError.responseUnparsable("Got success response for issuance but response misses 'transaction_id' and 'certificate' parameters")
         }
