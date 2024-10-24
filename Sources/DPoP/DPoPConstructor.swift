@@ -64,10 +64,11 @@ public class DPoPConstructor: DPoPConstructorType {
       let hash = Data(hashed).base64URLEncodedString()
       dictionary["ath"] = hash
     }
+
     if let nonce {
         dictionary["nonce"] = nonce
     }
-
+      
     let payload = Payload(try dictionary.toThrowingJSONData())
 
     guard let signatureAlgorithm = SignatureAlgorithm(rawValue: algorithm.name) else {

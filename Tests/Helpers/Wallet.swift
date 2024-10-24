@@ -48,53 +48,54 @@ struct Wallet {
 }
 
 extension Wallet {
-  func issueByCredentialIdentifier(
-    _ identifier: String,
-    claimSet: ClaimSet? = nil
-  ) async throws -> String {
-    let credentialConfigurationIdentifier = try CredentialConfigurationIdentifier(value: identifier)
-    let credentialIssuerIdentifier = try CredentialIssuerId(CREDENTIAL_ISSUER_PUBLIC_URL)
-    
-    let resolver = CredentialIssuerMetadataResolver(
-      fetcher: Fetcher(session: self.session)
-    )
-    let issuerMetadata = await resolver.resolve(
-      source: .credentialIssuer(
-        credentialIssuerIdentifier
+    func issueByCredentialIdentifier(
+      _ identifier: String,
+      claimSet: ClaimSet? = nil
+    ) async throws -> String {
+      let credentialConfigurationIdentifier = try CredentialConfigurationIdentifier(value: identifier)
+      let credentialIssuerIdentifier = try CredentialIssuerId(CREDENTIAL_ISSUER_PUBLIC_URL)
+      
+      let resolver = CredentialIssuerMetadataResolver(
+        fetcher: Fetcher(session: self.session)
       )
-    )
-    
-    switch issuerMetadata {
-    case .success(let metaData):
-      if let authorizationServer = metaData.authorizationServers?.first {
-          let resolver = AuthorizationServerMetadataResolver(
-            oidcFetcher: Fetcher(session: self.session),
-            oauthFetcher: Fetcher(session: self.session)
+      let issuerMetadata = await resolver.resolve(
+        source: .credentialIssuer(
+          credentialIssuerIdentifier
+        )
+      )
+      
+      switch issuerMetadata {
+      case .success(let metaData):
+        if let authorizationServer = metaData?.authorizationServers?.first,
+           let metaData {
+            let resolver = AuthorizationServerMetadataResolver(
+              oidcFetcher: Fetcher(session: self.session),
+              oauthFetcher: Fetcher(session: self.session)
+            )
+          let authServerMetadata = await resolver.resolve(url: authorizationServer)
+          
+          let offer = try CredentialOffer(
+            credentialIssuerIdentifier: credentialIssuerIdentifier,
+            credentialIssuerMetadata: metaData,
+            credentialConfigurationIdentifiers: [
+              .init(value: identifier)
+            ],
+            grants: nil,
+            authorizationServerMetadata: try authServerMetadata.get()
           )
-        let authServerMetadata = await resolver.resolve(url: authorizationServer)
-        
-        let offer = try CredentialOffer(
-          credentialIssuerIdentifier: credentialIssuerIdentifier,
-          credentialIssuerMetadata: metaData,
-          credentialConfigurationIdentifiers: [
-            .init(value: identifier)
-          ],
-          grants: nil,
-          authorizationServerMetadata: try authServerMetadata.get()
-        )
-        return try await issueOfferedCredentialNoProof(
-          offer: offer,
-          credentialConfigurationIdentifier: credentialConfigurationIdentifier,
-          claimSet: claimSet
-        )
-        
-      } else {
-        throw ValidationError.error(reason: "Invalid authorization server")
+          return try await issueOfferedCredentialNoProof(
+            offer: offer,
+            credentialConfigurationIdentifier: credentialConfigurationIdentifier,
+            claimSet: claimSet
+          )
+          
+        } else {
+          throw ValidationError.error(reason: "Invalid authorization server")
+        }
+      case .failure(let error):
+        throw ValidationError.error(reason: "Invalid issuer metadata: \(error.localizedDescription)")
       }
-    case .failure(let error):
-      throw ValidationError.error(reason: "Invalid issuer metadata: \(error.localizedDescription)")
     }
-  }
   
   private func issueMultipleOfferedCredentialWithProof(
     offer: CredentialOffer,

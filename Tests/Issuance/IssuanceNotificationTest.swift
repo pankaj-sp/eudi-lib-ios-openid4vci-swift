@@ -241,7 +241,7 @@ class IssuanceNotificationTest: XCTestCase {
     let authorizationCode = "MZqG9bsQ8UALhsGNlY39Yw=="
     let request: UnauthorizedRequest = TestsConstants.unAuthorizedRequest
     
-    let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
+      let issuanceAuthorization: IssuanceAuthorization = .authorizationCode(authorizationCode: authorizationCode)
     let unAuthorized = await issuer.handleAuthorizationCode(
       parRequested: request,
       authorizationCode: issuanceAuthorization

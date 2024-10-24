@@ -81,7 +81,6 @@ public protocol IssuerType {
 }
 
 public actor Issuer: IssuerType {
-  
   public var deferredResponseEncryptionSpec: IssuanceResponseEncryptionSpec? = nil
   
   public let authorizationServerMetadata: IdentityAndAccessManagementMetadata
@@ -318,8 +317,7 @@ public actor Issuer: IssuerType {
                     refreshToken: nil,
                     cNonce: cNonce,
                     credentialIdentifiers: response.identifiers,
-                    timeStamp: Date().timeIntervalSinceReferenceDate,
-                    dpopNonce: response.dpopNonce
+                    timeStamp: Date().timeIntervalSinceReferenceDate
                 )
               )
             )
@@ -676,34 +674,34 @@ private extension Issuer {
     return (Array(scopes), configurationIdentifiers)
   }
   
-    func formatBasedRequest(
-      token: IssuanceAccessToken,
-      claimSet: ClaimSet?,
-      bindingKey: BindingKey? = nil,
-      cNonce: CNonce? = nil,
-      dpopNonce: DPopNonce? = nil,
-      credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
-      responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
-    ) async throws -> Result<SubmittedRequest, Error> {
-        
-      guard let supportedCredential = issuerMetadata
-        .credentialsSupported[credentialConfigurationIdentifier] else {
-        throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
-      }
+  func formatBasedRequest(
+    token: IssuanceAccessToken,
+    claimSet: ClaimSet?,
+    bindingKey: BindingKey? = nil,
+    cNonce: CNonce? = nil,
+    dpopNonce: DPopNonce? = nil,
+    credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
+    responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
+  ) async throws -> Result<SubmittedRequest, Error> {
       
-      return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
-        return try supportedCredential.toIssuanceRequest(
-          requester: issuanceRequester,
-          claimSet: claimSet,
-          proof: bindingKey?.toSupportedProof(
-            issuanceRequester: issuanceRequester,
-            credentialSpec: supportedCredential,
-            cNonce: cNonce?.value
-          ),
-          responseEncryptionSpecProvider: responseEncryptionSpecProvider
-        )
-      }
+    guard let supportedCredential = issuerMetadata
+      .credentialsSupported[credentialConfigurationIdentifier] else {
+      throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
     }
+    
+    return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
+      return try supportedCredential.toIssuanceRequest(
+        requester: issuanceRequester,
+        claimSet: claimSet, 
+        proof: bindingKey?.toSupportedProof(
+          issuanceRequester: issuanceRequester,
+          credentialSpec: supportedCredential,
+          cNonce: cNonce?.value
+        ),
+        responseEncryptionSpecProvider: responseEncryptionSpecProvider
+      )
+    }
+  }
   
   func identifierBasedRequest(
     token: IssuanceAccessToken,
