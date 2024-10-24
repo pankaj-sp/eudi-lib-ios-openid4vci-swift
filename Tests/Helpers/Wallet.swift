@@ -582,7 +582,7 @@ extension Wallet {
     switch deferredRequestResponse {
     case .success(let response):
       switch response {
-      case .issued(let credential):
+      case .issued(_, let credential):
         return credential
       case .issuancePending(let transactionId):
         throw ValidationError.error(reason: "Credential not ready yet. Try after \(transactionId.interval ?? 0)")
