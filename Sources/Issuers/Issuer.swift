@@ -19,7 +19,8 @@ import JOSESwift
 public protocol IssuerType {
   
   func pushAuthorizationCodeRequest(
-    credentialOffer: CredentialOffer
+    credentialOffer: CredentialOffer,
+    clientAttestation: ClientAttestation?
   ) async throws -> Result<UnauthorizedRequest, Error>
   
   func authorizeWithPreAuthorizationCode(
@@ -122,7 +123,8 @@ public actor Issuer: IssuerType {
   }
   
   public func pushAuthorizationCodeRequest(
-    credentialOffer: CredentialOffer
+    credentialOffer: CredentialOffer,
+    clientAttestation: ClientAttestation? = nil
   ) async throws -> Result<UnauthorizedRequest, Error> {
     let credentials = credentialOffer.credentialConfigurationIdentifiers
     let issuerState: String? = switch credentialOffer.grants {
@@ -156,7 +158,8 @@ public actor Issuer: IssuerType {
           issuerState: issuerState,
           resource: resource,
           dpopNonce: nil,
-          retry: true
+          retry: true,
+          clientAttestation: clientAttestation
         ).get()
         
         return .success(
