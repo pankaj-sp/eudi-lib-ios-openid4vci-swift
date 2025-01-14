@@ -43,7 +43,8 @@ public protocol AuthorizationServerClientType {
     issuerState: String?,
     resource: String?,
     dpopNonce: Nonce?,
-    retry: Bool
+    retry: Bool,
+    clientAttestation: ClientAttestation?
   ) async throws -> Result<(PKCEVerifier, GetAuthorizationCodeURL, Nonce?), Error>
   
   func requestAccessTokenAuthFlow(
@@ -78,7 +79,6 @@ public protocol AuthorizationServerClientType {
 }
 
 public actor AuthorizationServerClient: AuthorizationServerClientType {
-  
   public let config: OpenId4VCIConfig
   public let service: AuthorisationServiceType
   public let parPoster: PostingType
@@ -215,7 +215,8 @@ public actor AuthorizationServerClient: AuthorizationServerClientType {
     issuerState: String?,
     resource: String? = nil,
     dpopNonce: Nonce? = nil,
-    retry: Bool = true
+    retry: Bool = true,
+    clientAttestation: ClientAttestation? = nil
   ) async throws -> Result<(PKCEVerifier, GetAuthorizationCodeURL, Nonce?), Error> {
     guard !scopes.isEmpty else {
       throw ValidationError.error(reason: "No scopes provided. Cannot submit par with no scopes.")
@@ -239,14 +240,27 @@ public actor AuthorizationServerClient: AuthorizationServerClientType {
       guard let parEndpoint = parEndpoint else {
         throw ValidationError.error(reason: "Missing PAR endpoint")
       }
-      
+        var headers = try await tokenEndPointHeaders(
+            dpopNonce: dpopNonce
+          )
+        
+        switch authorizationServerMetadata {
+        case .oidc(let data):
+            if let tokenEndpointAuthMethodsSupported = data.tokenEndpointAuthMethodsSupported,
+               tokenEndpointAuthMethodsSupported.contains(where: { $0 == "attest_jwt_client_auth" }) {
+                headers = await preparePOP(header: headers, clientAttestation: clientAttestation)
+            }
+        case .oauth(let data):
+            if let tokenEndpointAuthMethodsSupported = data.tokenEndpointAuthMethodsSupported,
+               tokenEndpointAuthMethodsSupported.contains(where: { $0 == "attest_jwt_client_auth" }) {
+                headers = await preparePOP(header: headers, clientAttestation: clientAttestation)
+            }
+        }
       let response: ResponseWithHeaders<PushedAuthorizationRequestResponse> = try await service.formPost(
         poster: parPoster,
         url: parEndpoint,
         request: authRequest,
-        headers: tokenEndPointHeaders(
-          dpopNonce: dpopNonce
-        )
+        headers: headers
       )
       
       switch response.body {
@@ -570,6 +584,27 @@ private extension AuthorizationServerClient {
       params[Constants.AUTHORIZATION_DETAILS] = formParameterString
     }
   }
+    
+    private func preparePOP(header: [String: String], clientAttestation: ClientAttestation?) async -> [String: String] {
+        guard let clientAttestation else { return header }
+        
+        var headers = header
+        let pop = clientAttestation.clientAttestationPoPJWTType
+        var nonce: Nonce? = nil
+        if let nonceString = pop.nonce {
+            nonce = Nonce(value: nonceString)
+        }
+        do {
+            if let popJWT = try await dpopConstructor?.jwtWIAPoP(clientId: pop.issuer, expirationTimeInterval: pop.duration, pidIssuerURL: pop.audience, nonce: nonce) {
+                headers[ContentType.attestationKey] = clientAttestation.clientAttestationJWT
+                headers[ContentType.attestationPoPKey] = popJWT
+                return headers
+            }
+        } catch {
+            return headers
+        }
+        return headers
+    }
 }
 
 extension Array where Element == CredentialConfigurationIdentifier {

@@ -23,6 +23,13 @@ public protocol DPoPConstructorType {
     accessToken: String?,
     nonce: Nonce?
   ) async throws -> String
+    
+    func jwtWIAPoP(
+        clientId: String,
+        expirationTimeInterval: TimeInterval,
+        pidIssuerURL: String,
+        nonce: Nonce?
+    ) async throws -> String
 }
 
 public class DPoPConstructor: DPoPConstructorType {
@@ -39,12 +46,21 @@ public class DPoPConstructor: DPoPConstructorType {
     case options = "OPTIONS"
     case trace = "TRACE"
   }
+    
+    private enum JWTTypes: String {
+        case dpopJwt = "dpop+jwt"
+        case clientAttestationPop = "oauth-client-attestation-pop"
+    }
 
   public let algorithm: JWSAlgorithm
   public let jwk: JWK
   public let privateKey: SigningKeyProxy
 
-  public init(algorithm: JWSAlgorithm, jwk: JWK, privateKey: SigningKeyProxy) {
+  public init(
+    algorithm: JWSAlgorithm,
+    jwk: JWK,
+    privateKey: SigningKeyProxy
+  ) {
     self.algorithm = algorithm
     self.jwk = jwk
     self.privateKey = privateKey
@@ -98,4 +114,48 @@ public class DPoPConstructor: DPoPConstructorType {
 
     return jws.compactSerializedString
   }
+    
+    public func jwtWIAPoP(
+        clientId: String,
+        expirationTimeInterval: TimeInterval,
+        pidIssuerURL: String,
+        nonce: Nonce? = nil
+    ) async throws -> String {
+        
+        let header = try JWSHeader(parameters: [
+            JWTClaimNames.type: JWTTypes.clientAttestationPop.rawValue,
+          JWTClaimNames.algorithm: algorithm.name,
+          JWTClaimNames.JWK: jwk.toDictionary()
+        ])
+
+        var dictionary: [String: Any] = [
+            JWTClaimNames.issuer: clientId,
+            JWTClaimNames.audience: pidIssuerURL,
+            JWTClaimNames.expirationTime: Int(Date().timeIntervalSince1970.rounded()),
+          JWTClaimNames.jwtId: String.randomBase64URLString(length: 20)
+        ]
+        
+        nonce.map { dictionary[JWTClaimNames.nonce] = $0.value }
+
+        let payload = Payload(try dictionary.toThrowingJSONData())
+        
+        guard let signatureAlgorithm = SignatureAlgorithm(rawValue: algorithm.name) else {
+          throw CredentialIssuanceError.cryptographicAlgorithmNotSupported
+        }
+        
+        let signer = try await BindingKey.createSigner(
+          with: header,
+          and: payload,
+          for: privateKey,
+          and: signatureAlgorithm
+        )
+        
+        let jws = try JWS(
+          header: header,
+          payload: payload,
+          signer: signer
+        )
+
+        return jws.compactSerializedString
+    }
 }
