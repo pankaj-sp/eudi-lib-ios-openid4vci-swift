@@ -411,8 +411,9 @@ public actor AuthorizationServerClient: AuthorizationServerClientType {
       }
     } catch {
       if let postError = error as? PostError {
+        print("postError = error as? PostError")
+        print(postError)
         switch postError {
-          print("postError = error as? PostError")
         case .useDpopNonce(let nonce):
           print(".useDpopNonce(let nonce)")
           if retry {
