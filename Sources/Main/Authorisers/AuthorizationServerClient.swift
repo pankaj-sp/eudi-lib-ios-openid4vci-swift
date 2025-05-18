@@ -347,7 +347,7 @@ public actor AuthorizationServerClient: AuthorizationServerClientType {
     Int?,
     Nonce?
   ), Error> {
-    
+    print("requestAccessTokenAuthFlow()")
     let parameters: JSON = authCodeFlow(
       authorizationCode: authorizationCode,
       redirectionURI: redirectionURI,
@@ -376,9 +376,11 @@ public actor AuthorizationServerClient: AuthorizationServerClientType {
         headers: clientAttestationHeaders + tokenHeaders,
         parameters: parameters.toDictionary().convertToDictionaryOfStrings()
       )
+      print("requestAccessTokenAuthFlow():: response")
       
       switch response.body {
       case .success(let tokenType, let accessToken, let refreshToken, let expiresIn, _, let nonce, _, let identifiers):
+        print("requestAccessTokenAuthFlow():: response:: success")
         return .success(
           (
             try .init(
@@ -410,8 +412,11 @@ public actor AuthorizationServerClient: AuthorizationServerClientType {
     } catch {
       if let postError = error as? PostError {
         switch postError {
+          print("postError = error as? PostError")
         case .useDpopNonce(let nonce):
+          print(".useDpopNonce(let nonce)")
           if retry {
+            print("retry:: requestAccessTokenAuthFlow")
             return try await requestAccessTokenAuthFlow(
               authorizationCode: authorizationCode,
               codeVerifier: codeVerifier,
