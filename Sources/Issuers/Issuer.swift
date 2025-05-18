@@ -304,6 +304,7 @@ public actor Issuer: IssuerType {
     authorizationCode: UnauthorizedRequest,
     authorizationDetailsInTokenRequest: AuthorizationDetailsInTokenRequest = .doNotInclude
   ) async -> Result<AuthorizedRequest, Error> {
+    print("authorizeWithAuthorizationCode()")
     switch authorizationCode {
     case .par:
       return .failure(
@@ -334,8 +335,9 @@ public actor Issuer: IssuerType {
             dpopNonce: request.dpopNonce,
             retry: true
           ).get()
-          
+          print("authorizeWithAuthorizationCode():: response")
           if let cNonce = response.nonce {
+            print("authorizeWithAuthorizationCode():: sucess:: proofRequired")
             return .success(
               .proofRequired(
                 accessToken: try .init(
@@ -353,6 +355,7 @@ public actor Issuer: IssuerType {
               )
             )
           } else {
+            print("authorizeWithAuthorizationCode():: sucess:: noProofRequired")
             return .success(
               .noProofRequired(
                 accessToken: try .init(
